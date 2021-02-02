@@ -37,6 +37,7 @@ func NewCache(size int) (cache *Cache) {
 
 // NewCacheCustomTimer returns new cache with custom timer.
 func NewCacheCustomTimer(size int, timer Timer) (cache *Cache) {
+	// buf的大小最小512k
 	if size < minBufSize {
 		size = minBufSize
 	}
@@ -45,6 +46,7 @@ func NewCacheCustomTimer(size int, timer Timer) (cache *Cache) {
 	}
 	cache = new(Cache)
 	for i := 0; i < segmentCount; i++ {
+		// 初始化每个segment，大小最少为512k/256=2k
 		cache.segments[i] = newSegment(size/segmentCount, i, timer)
 	}
 	return
@@ -65,6 +67,7 @@ func (cache *Cache) Set(key, value []byte, expireSeconds int) (err error) {
 
 // Touch updates the expiration time of an existing key. expireSeconds <= 0 means no expire,
 // but it can be evicted when cache is full.
+// 对存在的key更新过期时间，key续期
 func (cache *Cache) Touch(key []byte, expireSeconds int) (err error) {
 	hashVal := hashFunc(key)
 	segID := hashVal & segmentAndOpVal
@@ -118,6 +121,7 @@ func (cache *Cache) GetOrSet(key, value []byte, expireSeconds int) (retValue []b
 }
 
 // Peek returns the value or not found error, without updating access time or counters.
+// 不更新访问时间和计数器
 func (cache *Cache) Peek(key []byte) (value []byte, err error) {
 	hashVal := hashFunc(key)
 	segID := hashVal & segmentAndOpVal
@@ -147,6 +151,7 @@ func (cache *Cache) PeekFn(key []byte, fn func([]byte) error) (err error) {
 
 // GetWithBuf copies the value to the buf or returns not found error.
 // This method doesn't allocate memory when the capacity of buf is greater or equal to value.
+// 当buf的cap>value的cap时，不会分配内存
 func (cache *Cache) GetWithBuf(key, buf []byte) (value []byte, err error) {
 	hashVal := hashFunc(key)
 	segID := hashVal & segmentAndOpVal

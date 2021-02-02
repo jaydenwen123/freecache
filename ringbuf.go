@@ -16,10 +16,11 @@ type RingBuf struct {
 	begin int64 // beginning offset of the data stream.
 	end   int64 // ending offset of the data stream.
 	data  []byte
-	index int //range from '0' to 'len(rb.data)-1'
+	index int // range from '0' to 'len(rb.data)-1'
 }
 
 func NewRingBuf(size int, begin int64) (rb RingBuf) {
+	// 分配固定的空间
 	rb.data = make([]byte, size)
 	rb.Reset(begin)
 	return
@@ -64,13 +65,21 @@ func (rb *RingBuf) ReadAt(p []byte, off int64) (n int, err error) {
 		err = ErrOutOfRange
 		return
 	}
+	// 读的起始位置
 	readOff := rb.getDataOff(off)
+	// 读的结束位置
 	readEnd := readOff + int(rb.end-off)
+	// 0<=start<=readOff<=readEnd<=len(data)
 	if readEnd <= len(rb.data) {
 		n = copy(p, rb.data[readOff:readEnd])
 	} else {
+		// 大于这个len(data)的话，readOff<=len(data)<=readEnd
+		// 分两段来读
+		// 第一段readOff~len(data)
 		n = copy(p, rb.data[readOff:])
 		if n < len(p) {
+			// 第二段0~readEnd-len(data)
+			// 读了n个字符，所以从n之后开始读取剩下的数据
 			n += copy(p[n:], rb.data[:readEnd-len(rb.data)])
 		}
 	}
@@ -82,9 +91,11 @@ func (rb *RingBuf) ReadAt(p []byte, off int64) (n int, err error) {
 
 func (rb *RingBuf) getDataOff(off int64) int {
 	var dataOff int
+	// 0<=begin<=end<=len(data)
 	if rb.end-rb.begin < int64(len(rb.data)) {
 		dataOff = int(off - rb.begin)
 	} else {
+		// 0<=begin<=len(data)<=end
 		dataOff = rb.index + int(off-rb.begin)
 	}
 	if dataOff >= len(rb.data) {
@@ -101,6 +112,7 @@ func (rb *RingBuf) Slice(off, length int64) ([]byte, error) {
 	}
 	readOff := rb.getDataOff(off)
 	readEnd := readOff + int(length)
+	// 不发生拷贝
 	if readEnd <= len(rb.data) {
 		return rb.data[readOff:readEnd:readEnd], nil
 	}
@@ -121,10 +133,12 @@ func (rb *RingBuf) Write(p []byte) (n int, err error) {
 		return
 	}
 	for n < len(p) {
+		// 从index开始往后写，end是一直增加的，index即是end超过len(data)后截取的新的写入位置
 		written := copy(rb.data[rb.index:], p[n:])
 		rb.end += int64(written)
 		n += written
 		rb.index += written
+		// end其实是不变，index是相当于end取余后的数字
 		if rb.index >= len(rb.data) {
 			rb.index -= len(rb.data)
 		}
@@ -140,8 +154,11 @@ func (rb *RingBuf) WriteAt(p []byte, off int64) (n int, err error) {
 		err = ErrOutOfRange
 		return
 	}
+	// 获取写入的位置
 	writeOff := rb.getDataOff(off)
+
 	writeEnd := writeOff + int(rb.end-off)
+
 	if writeEnd <= len(rb.data) {
 		n = copy(rb.data[writeOff:writeEnd], p)
 	} else {
