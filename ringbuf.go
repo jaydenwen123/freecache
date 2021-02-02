@@ -96,6 +96,7 @@ func (rb *RingBuf) getDataOff(off int64) int {
 		dataOff = int(off - rb.begin)
 	} else {
 		// 0<=begin<=len(data)<=end
+		// index<begin,off-begin+index
 		dataOff = rb.index + int(off-rb.begin)
 	}
 	if dataOff >= len(rb.data) {
@@ -143,7 +144,9 @@ func (rb *RingBuf) Write(p []byte) (n int, err error) {
 			rb.index -= len(rb.data)
 		}
 	}
+	// 满了
 	if int(rb.end-rb.begin) > len(rb.data) {
+		//
 		rb.begin = rb.end - int64(len(rb.data))
 	}
 	return
@@ -159,11 +162,14 @@ func (rb *RingBuf) WriteAt(p []byte, off int64) (n int, err error) {
 
 	writeEnd := writeOff + int(rb.end-off)
 
+	// 分一段写
 	if writeEnd <= len(rb.data) {
 		n = copy(rb.data[writeOff:writeEnd], p)
 	} else {
+		// 分两段写writeOff~size,0~writeEnd-size
 		n = copy(rb.data[writeOff:], p)
 		if n < len(p) {
+			// newEnd=writeEnd-len(rb.data)
 			n += copy(rb.data[:writeEnd-len(rb.data)], p[n:])
 		}
 	}
@@ -179,8 +185,10 @@ func (rb *RingBuf) EqualAt(p []byte, off int64) bool {
 	if readEnd <= len(rb.data) {
 		return bytes.Equal(p, rb.data[readOff:readEnd])
 	} else {
+		// 分两段来比较，先比较第一段
 		firstLen := len(rb.data) - readOff
 		equal := bytes.Equal(p[:firstLen], rb.data[readOff:])
+		// 第一段相等再比较第二段
 		if equal {
 			secondLen := len(p) - firstLen
 			equal = bytes.Equal(p[firstLen:], rb.data[:secondLen])
@@ -191,6 +199,7 @@ func (rb *RingBuf) EqualAt(p []byte, off int64) bool {
 
 // Evacuate read the data at off, then write it to the the data stream,
 // Keep it from being overwritten by new data.
+// 从off位置开始读取，然后再重新从index写入
 func (rb *RingBuf) Evacuate(off int64, length int) (newOff int64) {
 	if off+int64(length) > rb.end || off < rb.begin {
 		return -1
@@ -217,6 +226,7 @@ func (rb *RingBuf) Evacuate(off int64, length int) (newOff int64) {
 		} else {
 			n = copy(rb.data[rb.index:], rb.data[readOff:])
 			rb.index += n
+			// 剩余的数据
 			var tail = length - n
 			n = copy(rb.data[rb.index:], rb.data[:tail])
 			rb.index += n
