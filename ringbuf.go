@@ -65,9 +65,9 @@ func (rb *RingBuf) ReadAt(p []byte, off int64) (n int, err error) {
 		err = ErrOutOfRange
 		return
 	}
-	// 读的起始位置
+	// 读的起始下标
 	readOff := rb.getDataOff(off)
-	// 读的结束位置
+	// 读的结束下标
 	readEnd := readOff + int(rb.end-off)
 	// 0<=start<=readOff<=readEnd<=len(data)
 	if readEnd <= len(rb.data) {
@@ -207,26 +207,31 @@ func (rb *RingBuf) Evacuate(off int64, length int) (newOff int64) {
 	readOff := rb.getDataOff(off)
 	if readOff == rb.index {
 		// no copy evacuate
+		// 不需要再写了，但是需要把index移动
 		rb.index += length
 		if rb.index >= len(rb.data) {
 			rb.index -= len(rb.data)
 		}
 	} else if readOff < rb.index {
+		// 先读取，然后再写入到index之后
 		var n = copy(rb.data[rb.index:], rb.data[readOff:readOff+length])
 		rb.index += n
 		if rb.index == len(rb.data) {
 			rb.index = copy(rb.data, rb.data[readOff+n:readOff+length])
 		}
 	} else {
+		// readOff>index
 		var readEnd = readOff + length
 		var n int
+		// readeEnd<len(data)
 		if readEnd <= len(rb.data) {
 			n = copy(rb.data[rb.index:], rb.data[readOff:readEnd])
 			rb.index += n
 		} else {
+			// 拷贝第一段
 			n = copy(rb.data[rb.index:], rb.data[readOff:])
 			rb.index += n
-			// 剩余的数据
+			// 拷贝剩余的数据
 			var tail = length - n
 			n = copy(rb.data[rb.index:], rb.data[:tail])
 			rb.index += n
@@ -249,11 +254,16 @@ func (rb *RingBuf) Resize(newSize int) {
 	}
 	newData := make([]byte, newSize)
 	var offset int
+	// 满了
 	if rb.end-rb.begin == int64(len(rb.data)) {
+		//
 		offset = rb.index
 	}
+	// 数据还大，有部分数据要丢弃
 	if int(rb.end-rb.begin) > newSize {
+		// newSize+1~end
 		discard := int(rb.end-rb.begin) - newSize
+		// 丢弃的数据等价于写入到offset之后，所以按照下面重新计算offset
 		offset = (offset + discard) % len(rb.data)
 		rb.begin = rb.end - int64(newSize)
 	}
